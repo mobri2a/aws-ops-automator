@@ -14,7 +14,7 @@
 s3bucket=s3://$(bucket)/
 
 # directories containing deployed python code
-pydirs= actions boto_retry builders configuration  handlers helpers metrics outputs scheduling services tagging
+pydirs= actions boto_retry builders configuration handlers helpers metrics outputs scheduling services tagging
 py=$(foreach dir, $(pydirs), $(wildcard $(dir)/*.py))
 
 # source sub dir of ecs related files
@@ -31,7 +31,7 @@ zip = $(regional_assets_dir)/ops-automator.zip
 cw_zip = $(regional_assets_dir)/cloudwatch-handler.zip
 templates=$(wildcard ../../deployment/*.template)
 # build targets
-build: lambda cloudwatchhandler cfn docker
+build: lambda cloudwatchhandler cfn deploy
 
 ######################################################################################################################
 # lambda code                                                                                                        #
@@ -44,20 +44,20 @@ lambda:$(py) main.py version.txt
 	find $(deployment) -maxdepth 1 -type f -name 'ops-automator.zip' -delete
 
 	# build zip
-	zip  $(zip) version.txt
+	zip $(zip) version.txt
 	mv main.py main.py.org
 	sed s/%version%/$(version)/g main.py.org > main.py
-	zip  $(zip) main.py config.py
+	zip $(zip) main.py config.py
 	rm main.py
 	mv main.py.org main.py
 	zip $(zip) $(pydirs)
-	zip -r $(zip)  $(py) version.txt
+	zip -r $(zip) $(py) version.txt
 	zip -r -q $(zip) pytz
-	zip -r -q $(zip) requests
-	zip -r -q $(zip) urllib3
-	zip -r -q $(zip) chardet
-	zip -r -q $(zip) idna
-	zip -r -q $(zip) certifi
+	# zip -r -q $(zip) requests
+	# zip -r -q $(zip) urllib3
+	# zip -r -q $(zip) chardet
+	# zip -r -q $(zip) idna
+	# zip -r -q $(zip) certifi
 	zip $(zip) forward-events.py
 	zip $(zip) build_task_custom_resource.py
 	zip $(zip) ../cloudformation/AccountForwardEvents.template
@@ -124,21 +124,8 @@ docker: $(ecs)
 ######################################################################################################################
 deploy: build
 	# ops automator versioned copy
-	aws s3 cp $(deployment)/ops-automator.template $(s3bucket)$(prefix)  --acl public-read
+	aws s3 cp $(global_assets_dir)/ops-automator.template $(s3bucket)$(solution)/
 	# ops automator lambda code zip file
-	aws s3 cp $(deployment)/ops-automator.zip $(s3bucket)$(prefix)  --acl public-read
+	aws s3 cp $(regional_assets_dir)/ops-automator.zip $(s3bucket)$(solution)/
 	# cloudwatch queue handler
-	aws s3 cp $(deployment)/cloudwatch-handler.zip $(s3bucket)$(prefix)  --acl public-read
-
-	# ecs related files
-	aws s3 cp --recursive $(deployment)/ecs $(s3bucket)$(prefix)ecs
-
-	# extra copy of script to build docker image
-	aws s3 cp $(deployment)/ops-automator-latest.template $(s3bucket) --acl public-read
-	# extra copy of script to build docker image
-	aws s3 cp $(deployment)/ecs/build-and-deploy-image.sh $(s3bucket) --acl public-read
-	# extra copy of ecs-cluster template
-	aws s3 cp $(deployment)/ops-automator-ecs-cluster.template $(s3bucket) --acl public-read
-
-	# update build number after deployment
-	# python update-build-number.py version.txt
+	aws s3 cp $(regional_assets_dir)/cloudwatch-handler.zip $(s3bucket)$(solution)/
